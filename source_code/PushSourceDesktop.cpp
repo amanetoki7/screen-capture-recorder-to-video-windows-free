@@ -143,6 +143,8 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CPushSourceDesktop *pFilter)
 	m_iStretchToThisConfigHeight = read_config_setting(TEXT("stretch_to_height"), 0, false);
 	m_iStretchMode = read_config_setting(TEXT("stretch_mode_high_quality_if_1"), 0, true); // guess it's either stretch mode 0 or 1
 	ASSERT_RAISE(m_iStretchToThisConfigWidth >= 0 && m_iStretchToThisConfigHeight >= 0 && m_iStretchMode >= 0); // sanity checks
+	// when the output size has a different aspect ratio than the captured area, scale to fit and fill the rest with black bars (letterbox/pillarbox) instead of distorting the picture
+	m_bKeepAspectRatioWithBlackBars = is_config_set_to_1(TEXT("stretch_keep_aspect_ratio_with_black_bars_if_1"));
 
 	m_bUseCaptureBlt = read_config_setting(TEXT("capture_transparent_windows_including_mouse_in_non_aero_if_1_causes_annoying_mouse_flicker"), 0, true) == 1;
 	m_bCaptureMouse = read_config_setting(TEXT("capture_mouse_default_1"), 1, true) == 1;
@@ -165,8 +167,8 @@ CPushPinDesktop::CPushPinDesktop(HRESULT *phr, CPushSourceDesktop *pFilter)
 	m_millisToSleepBeforePollForChanges = read_config_setting(TEXT("millis_to_sleep_between_poll_for_dedupe_changes"), 10, true);
 
     wchar_t out[10000];
-	swprintf(out, 10000, L"default/from reg got config as: %dx%d -> %dx%d (%d top %d bottom %d l %d r) %dfps, dedupe? %d, millis between dedupe polling %d, m_bReReadRegistry? %d hwnd:%d \n", 
-	  m_iCaptureConfigHeight, m_iCaptureConfigWidth, getCaptureDesiredFinalHeight(), getCaptureDesiredFinalWidth(), m_rCaptureCoordinates.top, m_rCaptureCoordinates.bottom, m_rCaptureCoordinates.left, m_rCaptureCoordinates.right, config_max_fps, m_bDeDupe, m_millisToSleepBeforePollForChanges, m_bReReadRegistry, m_iHwndToTrack);
+	swprintf(out, 10000, L"default/from reg got config as: %dx%d -> %dx%d (%d top %d bottom %d l %d r) %dfps, dedupe? %d, millis between dedupe polling %d, m_bReReadRegistry? %d hwnd:%d keep aspect ratio w/ black bars? %d \n", 
+	  m_iCaptureConfigHeight, m_iCaptureConfigWidth, getCaptureDesiredFinalHeight(), getCaptureDesiredFinalWidth(), m_rCaptureCoordinates.top, m_rCaptureCoordinates.bottom, m_rCaptureCoordinates.left, m_rCaptureCoordinates.right, config_max_fps, m_bDeDupe, m_millisToSleepBeforePollForChanges, m_bReReadRegistry, m_iHwndToTrack, m_bKeepAspectRatioWithBlackBars);
 
 	// warmup the debugging message system
 	__int64 measureDebugOutputSpeed = StartCounter();
@@ -378,10 +380,11 @@ void CPushPinDesktop::CopyScreenSomethingToDataBlock(HDC hScrDC, BYTE *pData, BI
 	ASSERT_RAISE(m_rCaptureCoordinates.bottom - m_rCaptureCoordinates.top == iFinalStretchHeight);
 	ASSERT_RAISE(m_rCaptureCoordinates.right - m_rCaptureCoordinates.left == iFinalStretchWidth);
 
-	doJustBitBltOrScaling(hMemDC, m_iCaptureConfigWidth, m_iCaptureConfigHeight, iFinalStretchWidth, iFinalStretchHeight, hScrDC, nX, nY);
+	RECT destRect = getDestRectWithin(m_iCaptureConfigWidth, m_iCaptureConfigHeight, iFinalStretchWidth, iFinalStretchHeight); // where it lands within the output (offset/smaller when there are black bars)
+	doJustBitBltOrScaling(hMemDC, m_iCaptureConfigWidth, m_iCaptureConfigHeight, iFinalStretchWidth, iFinalStretchHeight, &destRect, hScrDC, nX, nY);
 
 	if(m_bCaptureMouse) 
-	  AddMouse(hMemDC, &m_rCaptureCoordinates, hScrDC, m_iHwndToTrack);
+	  AddMouse(hMemDC, &m_rCaptureCoordinates, hScrDC, m_iHwndToTrack, m_iCaptureConfigWidth, m_iCaptureConfigHeight, &destRect);
 
     // select old bitmap back into memory DC and get handle to
     // bitmap of the capture...whatever this even means...	
@@ -433,10 +436,28 @@ void CPushPinDesktop::CopyScreenSomethingToDataBlock(HDC hScrDC, BYTE *pData, BI
     DeleteDC(hMemDC);
 }
 
-void CPushPinDesktop::doJustBitBltOrScaling(HDC hMemDC, int nWidth, int nHeight, int iFinalWidth, int iFinalHeight, HDC hScrDC, int nX, int nY) {
+// figures out where (and how big) the captured area gets drawn within the output bitmap of iFinalWidth x iFinalHeight
+RECT CPushPinDesktop::getDestRectWithin(int nWidth, int nHeight, int iFinalWidth, int iFinalHeight) {
+	RECT dest = {0, 0, iFinalWidth, iFinalHeight}; // default: fill the whole output, distorting the picture if the aspect ratios differ
+	if(m_bKeepAspectRatioWithBlackBars && !((iFinalWidth == nWidth) && (iFinalHeight == nHeight))) {
+		// scale it so the whole captured area fits inside, keeping its aspect ratio, centered. The rest gets black bars (letterbox/pillarbox)
+		double scale = min((double) iFinalWidth / nWidth, (double) iFinalHeight / nHeight);
+		int destWidth = min(iFinalWidth, (int) (nWidth * scale + 0.5));
+		int destHeight = min(iFinalHeight, (int) (nHeight * scale + 0.5));
+		dest.left = (iFinalWidth - destWidth) / 2;
+		dest.top = (iFinalHeight - destHeight) / 2;
+		dest.right = dest.left + destWidth;
+		dest.bottom = dest.top + destHeight;
+	}
+	return dest;
+}
+
+void CPushPinDesktop::doJustBitBltOrScaling(HDC hMemDC, int nWidth, int nHeight, int iFinalWidth, int iFinalHeight, LPRECT lpDest, HDC hScrDC, int nX, int nY) {
 	__int64 start = StartCounter();
     
-	boolean notNeedStretching = (iFinalWidth == nWidth) && (iFinalHeight == nHeight);
+	int destWidth = lpDest->right - lpDest->left;
+	int destHeight = lpDest->bottom - lpDest->top;
+	boolean notNeedStretching = (destWidth == nWidth) && (destHeight == nHeight);
 
 	if(m_iHwndToTrack != NULL)
 		ASSERT_RAISE(notNeedStretching); // we don't support HWND plus scaling...hmm... LODO move assertion LODO implement this (low prio since they probably are just needing that window, not with scaling too [?])
@@ -444,6 +465,16 @@ void CPushPinDesktop::doJustBitBltOrScaling(HDC hMemDC, int nWidth, int nHeight,
     int captureType = SRCCOPY;
 	if(m_bUseCaptureBlt)
 	  captureType = captureType | CAPTUREBLT; // CAPTUREBLT here [last param] is for layered (transparent) windows in non-aero I guess (which happens to include the mouse, but we do that elsewhere)
+
+	if(lpDest->left > 0 || lpDest->top > 0 || lpDest->right < iFinalWidth || lpDest->bottom < iFinalHeight) {
+		// black bars around the captured area. Redone every frame, since the mouse cursor can get drawn over them...
+		HBRUSH hBlack = (HBRUSH) GetStockObject(BLACK_BRUSH);
+		RECT bar;
+		if(lpDest->top > 0)               { SetRect(&bar, 0, 0, iFinalWidth, lpDest->top);                          FillRect(hMemDC, &bar, hBlack); }
+		if(lpDest->bottom < iFinalHeight) { SetRect(&bar, 0, lpDest->bottom, iFinalWidth, iFinalHeight);            FillRect(hMemDC, &bar, hBlack); }
+		if(lpDest->left > 0)              { SetRect(&bar, 0, lpDest->top, lpDest->left, lpDest->bottom);            FillRect(hMemDC, &bar, hBlack); }
+		if(lpDest->right < iFinalWidth)   { SetRect(&bar, lpDest->right, lpDest->top, iFinalWidth, lpDest->bottom);  FillRect(hMemDC, &bar, hBlack); }
+	}
 
 	if (notNeedStretching) {
 
@@ -463,7 +494,7 @@ void CPushPinDesktop::doJustBitBltOrScaling(HDC hMemDC, int nWidth, int nHeight,
       }
 
 	   // Bit block transfer from screen our compatible memory DC.	Apparently this is faster than stretching.
-       BitBlt(hMemDC, 0, 0, nWidth, nHeight, hScrDC, nX, nY, captureType);
+       BitBlt(hMemDC, lpDest->left, lpDest->top, nWidth, nHeight, hScrDC, nX, nY, captureType);
 	   // 9.3 ms 1920x1080 -> 1920x1080 (100 fps) (11 ms? 14? random?)
 	}
 	else {
@@ -483,7 +514,7 @@ void CPushPinDesktop::doJustBitBltOrScaling(HDC hMemDC, int nWidth, int nHeight,
 			// 50 ms 1920x1080 -> 500x500 without aero
 			SetBrushOrgEx(hMemDC, 0, 0, 0); // MSDN says I should call this after using HALFTONE
 		}
-	    StretchBlt(hMemDC, 0, 0, iFinalWidth, iFinalHeight, hScrDC, nX, nY, nWidth, nHeight, captureType);
+	    StretchBlt(hMemDC, lpDest->left, lpDest->top, destWidth, destHeight, hScrDC, nX, nY, nWidth, nHeight, captureType);
 	}
 
 	if(show_performance)

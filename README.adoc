@@ -86,7 +86,34 @@ your_first_setting=1
 your_second_setting=100
 ...
 
-By default it reads the registry first, if it doesn't find something set there, it'll look in the .ini file.
+If that .ini file exists, settings are read from it only: the registry is ignored entirely, and settings missing from
+the file get their defaults. Without the .ini file, the registry is used.
+
+=== Capturing one particular monitor (visual selector)
+
+Start menu -> Screen Capturer Recorder -> configure -> "select monitor to capture (visual)"
+(configuration_setup_utility\select_monitor.bat) shows, on every monitor, the number that
+capture_particular_display_number_starting_at_zero expects. That is the order EnumDisplayMonitors returns the monitors
+in, which is what the filter uses, and it is not necessarily the number windows' display settings show.
+Click the monitor you want (or pick it in the list) and it writes capture_particular_display_number_starting_at_zero
+plus capture_width/capture_height for you, into the .ini file if you have one, otherwise into the registry.
+It can also set up the 16:9 black bars described below.
+Monitors that windows scales (display settings, ex: 150%) show two sizes: the real resolution, which DPI aware
+capturing programs (ffmpeg, vlc, obs...) see and which gets written, and the smaller one DPI unaware programs see.
+Tick the box (or pass -LogicalSizes) if your capturing program is one of the latter.
+
+Command line: select_monitor.bat -List | -Use N [-FitTo WxH] | -Reset
+
+=== Black bars instead of a squished picture (letterbox/pillarbox)
+
+stretch_to_width/stretch_to_height (or a size requested by the capturing application) normally stretch the captured
+area to that size, distorting it when the aspect ratios differ (ex: a 16:10 monitor recorded as 16:9). Set
+
+  stretch_keep_aspect_ratio_with_black_bars_if_1=1
+
+and the captured area is scaled to fit inside the output instead, centered, with black bars filling the rest.
+ex: 2560x1600 monitor + stretch_to_width=2560, stretch_to_height=1440 gives a 2304x1440 picture with 128 pixel black
+bars left and right. The visual selector above can set this up for you ("fit into 16:9 with black bars").
 
 == Trouble shooting ==
 
@@ -166,8 +193,7 @@ See also https://github.com/rdp/screen-capture-recorder-to-video-windows-free/is
 The code is gently based on/lifted from ("inspired by") this from the Windows 7.1 SDK
   ....\Microsoft SDKs\Windows\v7.1\Samples\multimedia\directshow\filters\pushsource as well as some other dshow demos around the 'net (tmhare virtual capture).
   so you'll probably want to install the Windows SDK before messing around with the source code.
-  To hack on the code, build the windows SDK directshow baseclasses, then open source_code/*.vcxproj in visual studio 2010
-  express.  This is meant to provide a "directshow filter" you can use in your graph, not a demo of how to do graphs.
+  To hack on the code, see the build instructions below.  This is meant to provide a "directshow filter" you can use in your graph, not a demo of how to do graphs.
   It outputs a .dll file that you "register" via (in administrator console) 
   $ regsvr32 XXX.dll (and unregister when you're done with regsvr32 /u XXX.dll)
   there are also some scripts to set the registry values (written in ruby/jruby currently for the GUI) but you don't
@@ -177,11 +203,17 @@ I can add features upon reasonable demand.
 
 Basically you want a feature, ping me, you got it.
 
-To build it locally, install VS Express 2010, install Microsoft SDK, open up your equivalent of 
-\Program Files\Microsoft SDKs\Windows\v7.1\Samples\multimedia\directshow\baseclasses\baseclasses.sln
-build it (debug)
-now add to your local build (project properties, from the source_code\pushdesktop.sln) adjust the VC++ Directories (Include/Library) 
-to point to your various baseclass directories.
+To build it locally, install Visual Studio 2019 or newer (the free Community edition is fine) with the
+"Desktop development with C++" workload, then run
+
+  source_code\build.bat
+
+It first compiles the DirectShow BaseClasses vendored in source_code\BaseClasses (MIT licensed, from
+https://github.com/microsoft/Windows-classic-samples) and then both filter dlls, into
+source_code\Win32\Release\screen-capture-recorder.dll and source_code\x64\releasex64\screen-capture-recorder-x64.dll
+(with the CRT statically linked, so no particular MSVC redistributable is needed to run them).
+Register the one matching your capturing application's bitness with regsvr32 (administrator console) to try it out.
+The old source_code\*.vcxproj files still expect Visual Studio 2010 and the Windows SDK 7.1 sample paths.
 
 == More Attributions ==
 

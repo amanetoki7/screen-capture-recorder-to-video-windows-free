@@ -1,0 +1,6 @@
+source_code/**/obj/
+source_code/**/*.pdb
+source_code/**/*.exp
+source_code/**/*.lib
+source_code/**/*.ilk
+source_code/**/*.res

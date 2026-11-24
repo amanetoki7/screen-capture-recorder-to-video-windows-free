@@ -111,7 +111,7 @@ protected:
 	HWND m_iHwndToTrack;
 	boolean m_bHwndTrackDecoration;
 	void CopyScreenSomethingToDataBlock(HDC hScrDc, BYTE *pData, BITMAPINFO *pHeader, IMediaSample *pSample);
-	void doJustBitBltOrScaling(HDC hMemDC, int nWidth, int nHeight,int nDestWidth,int nDestHeight, HDC hScrDC, int nX, int nY);
+	void doJustBitBltOrScaling(HDC hMemDC, int nWidth, int nHeight, int iFinalWidth, int iFinalHeight, LPRECT lpDest, HDC hScrDC, int nX, int nY);
 	void doDIBits(HDC hScrDC, HBITMAP hRawBitmap, int nHeightScanLines, BYTE *pData, BITMAPINFO *pHeader);
 
     BYTE *pOldData;
@@ -119,6 +119,8 @@ protected:
 	int m_iStretchToThisConfigWidth;
     int m_iStretchToThisConfigHeight;
     int m_iStretchMode;
+	boolean m_bKeepAspectRatioWithBlackBars; // stretch_keep_aspect_ratio_with_black_bars_if_1: letterbox/pillarbox instead of distorting, when the output's aspect ratio differs from the captured area's
+	RECT getDestRectWithin(int nWidth, int nHeight, int iFinalWidth, int iFinalHeight); // where the captured area lands within the output bitmap
 
 	int getCaptureDesiredFinalWidth();
 	int getCaptureDesiredFinalHeight();

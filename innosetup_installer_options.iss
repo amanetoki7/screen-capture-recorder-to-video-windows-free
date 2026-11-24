@@ -1,4 +1,4 @@
-#define AppVer "0.13.3"
+#define AppVer "0.14.0"
 
 #define AppName "Screen Capturer Recorder"
 ; AppId === AppName by default BTW
@@ -59,6 +59,7 @@ Name: {group}\configure\Readme  {#AppName}; Filename: {app}\README.txt
 Name: {group}\configure\configure by setting specific screen capture numbers  {#AppName}; Filename: {app}\configuration_setup_utility\generic_run_rb.bat; WorkingDir: {app}\configuration_setup_utility; Parameters: setup_via_numbers.rb; Flags: runminimized
 Name: {group}\configure\benchmark your machines screen capture speed  {#AppName}; Filename: {app}\BltTest.exe; WorkingDir: {app}
 Name: {group}\configure\configure by resizing a transparent window  {#AppName}; Filename: {app}\configuration_setup_utility\generic_run_rb.bat; WorkingDir: {app}\configuration_setup_utility; Parameters: window_resize.rb; Flags: runminimized
+Name: {group}\configure\select monitor to capture (visual)  {#AppName}; Filename: {app}\configuration_setup_utility\select_monitor.bat; WorkingDir: {app}\configuration_setup_utility; Flags: runminimized
 Name: {group}\configure\Display current capture settings  {#AppName}; Filename: {app}\configuration_setup_utility\generic_run_rb.bat; WorkingDir: {app}\configuration_setup_utility; Parameters: setup_via_numbers.rb --just-display-current-settings
 Name: {group}\configure\Uninstall {#AppName}; Filename: {uninstallexe}
 

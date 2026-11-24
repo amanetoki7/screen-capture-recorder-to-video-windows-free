@@ -98,7 +98,7 @@ long double GetCounterSinceStartMillis(__int64 sinceThisTime) // see above for s
 // or to debug the method call itself: printf("start %I64d end %I64d took %.02Lf ms", start, StartCounter(), elapsed); 
 
 
-void AddMouse(HDC hMemDC, LPRECT lpRect, HDC hScrDC, HWND hwnd) {
+void AddMouse(HDC hMemDC, LPRECT lpRect, HDC hScrDC, HWND hwnd, int nSrcWidth, int nSrcHeight, LPRECT lpDest) {
 	__int64 start = StartCounter();
 	POINT p;
 
@@ -111,12 +111,16 @@ void AddMouse(HDC hMemDC, LPRECT lpRect, HDC hScrDC, HWND hwnd) {
 	if(hwnd)
 	  ScreenToClient(hwnd, &p); // 0.010ms
 	
+	// map the cursor position into the output bitmap, which may be scaled/shifted relative to the captured area (stretch_to_*, black bars)
+	int x = lpDest->left + MulDiv(p.x - lpRect->left, lpDest->right - lpDest->left, nSrcWidth);
+	int y = lpDest->top + MulDiv(p.y - lpRect->top, lpDest->bottom - lpDest->top, nSrcHeight);
+
 	ICONINFO iconinfo;
 	BOOL ret = ::GetIconInfo(hcur, &iconinfo); // 0.09ms
 
 	if(ret) {
-		p.x -= iconinfo.xHotspot; // align mouse, I guess...
-		p.y -= iconinfo.yHotspot;
+		x -= iconinfo.xHotspot; // align mouse, I guess...
+		y -= iconinfo.yHotspot;
 
 		// avoid some memory leak or other...
 		if (iconinfo.hbmMask) {
@@ -127,8 +131,6 @@ void AddMouse(HDC hMemDC, LPRECT lpRect, HDC hScrDC, HWND hwnd) {
 		}
 	}
 	
-	int x= p.x-lpRect->left;
-	int y = p.y-lpRect->top;
 	DrawIcon(hMemDC, x, y, hcur); // 0.042ms
 	if(show_performance)
 	  LocalOutput("add mouse at %d,%d took %.02f ms", x, y, GetCounterSinceStartMillis(start)); // sum takes around 0.125 ms

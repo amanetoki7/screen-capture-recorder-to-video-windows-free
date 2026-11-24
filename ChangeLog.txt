@@ -1,3 +1,15 @@
+0.14.0
+  add "select monitor to capture (visual)" utility (configuration_setup_utility\select_monitor.bat):
+    shows on every monitor the EnumDisplayMonitors index that capture_particular_display_number_starting_at_zero expects,
+    click a monitor (or pick it from the list) to capture it, optionally letterboxed/pillarboxed into 16:9
+  add stretch_keep_aspect_ratio_with_black_bars_if_1: when the output size (stretch_to_width/height, or whatever the
+    capturing application negotiates) has a different aspect ratio than the captured area, scale to fit and fill the
+    rest with black bars instead of distorting the picture
+  the mouse cursor is now drawn at the right place when the output is scaled (stretch_to_*)
+  buildable with current Visual Studio versions (2019+): DirectShow BaseClasses vendored in source_code\BaseClasses,
+    see source_code\build.bat
+  (fork of https://github.com/rdp/screen-capture-recorder-to-video-windows-free)
+
 0.13.2
   if ScreenCaptureRecorder.ini file exists, assume all settings are there and use it solely, never the registry
     attempt avoid confusion of having settings set in two different places...
